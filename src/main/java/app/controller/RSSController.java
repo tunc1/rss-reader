@@ -8,6 +8,7 @@ import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/rss")
+@CrossOrigin
 public class RSSController
 {
 	private RSSParser parser;
