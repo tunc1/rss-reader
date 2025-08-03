@@ -7,6 +7,7 @@ import java.util.Comparator;
 import java.util.Optional;
 import java.text.SimpleDateFormat;
 import app.dto.RSSFeed;
+import app.util.TimeUtil;
 import org.springframework.stereotype.Component;
 import org.springframework.beans.factory.annotation.Value;
 import java.util.logging.Logger;
@@ -90,7 +91,7 @@ public class RSSParser
 						rssFeed.setPubDate(format.parse(pubDate));
 					else
 						rssFeed.setPubDate(now);
-					rssFeed.setTimeDifference(timeDifference(rssFeed.getPubDate()));
+					rssFeed.setTimeDifference(TimeUtil.timeDifference(rssFeed.getPubDate()));
 					list.add(rssFeed);
 				}
 			}
@@ -107,23 +108,5 @@ public class RSSParser
 		if(nodeList.getLength()>0)
 			return nodeList.item(0).getTextContent();
 		return null;
-	}
-	private String timeDifference(Date pubDate)
-	{
-		Date now=new Date();
-		long seconds=(now.getTime()-pubDate.getTime())/1000;
-		if(seconds>86400*2)
-			return (seconds/86400)+" days ago";
-		if(seconds>=86400)
-			return "1 day ago";
-		if(seconds>=7200)
-			return (seconds/3600)+" hours ago";
-		if(seconds>3600)
-			return "1 hour ago";
-		if(seconds>=120)
-			return (seconds/60)+" minutes ago";
-		if(seconds>60)
-			return "1 minute ago";
-		return "Just Now";
 	}
 }
