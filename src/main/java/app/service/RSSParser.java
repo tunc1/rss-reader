@@ -8,6 +8,7 @@ import java.util.Optional;
 import java.text.SimpleDateFormat;
 import app.dto.RSSFeed;
 import org.springframework.stereotype.Component;
+import org.springframework.beans.factory.annotation.Value;
 import java.util.logging.Logger;
 import java.util.logging.Level;
 import org.w3c.dom.Document;  
@@ -15,7 +16,11 @@ import org.w3c.dom.NodeList;
 import org.w3c.dom.Node;  
 import org.w3c.dom.Element;  
 import javax.xml.parsers.DocumentBuilderFactory;  
-import javax.xml.parsers.DocumentBuilder;  
+import javax.xml.parsers.DocumentBuilder;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Callable;
+import java.util.concurrent.Future;
 
 @Component
 public class RSSParser
@@ -24,9 +29,11 @@ public class RSSParser
 	private static final SimpleDateFormat format=new SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss zzz");
 	private static final Comparator<RSSFeed> comparator=(r1,r2)->r2.getPubDate().compareTo(r1.getPubDate());
 	private static final DocumentBuilderFactory documentBuilderFactory=DocumentBuilderFactory.newInstance();
+	private final ExecutorService executorService;
 	
-	public RSSParser()
+	public RSSParser(@Value("${batch-size}") int batchSize)
 	{
+		executorService=Executors.newFixedThreadPool(batchSize);
 		System.setProperty("http.agent", "Mozilla/5.0");
 	}
 	public List<RSSFeed> get(Optional<String[]> urls)
@@ -42,42 +49,57 @@ public class RSSParser
 	private void fillList(List<RSSFeed> list,String[] urls)
 	{
 		Date now=new Date();
-		List.of(urls).parallelStream().forEach(urlString->
+		List<Callable<List<RSSFeed>>> callables=new LinkedList<>();
+		for(String url:urls)
+			callables.add(()->getListFromUrl(url,now));
+		try
+		{
+			List<Future<List<RSSFeed>>> futures=executorService.invokeAll(callables);
+			for(Future<List<RSSFeed>> future:futures)
+				list.addAll(future.get());
+		}
+		catch(Exception e)
+		{
+			logger.log(Level.SEVERE,"Error",e);
+		}
+	}
+	private List<RSSFeed> getListFromUrl(String urlString,Date now)
+	{
+		logger.log(Level.INFO,urlString);
+		List<RSSFeed> list=new LinkedList<>();
+		try
+		{
+			DocumentBuilder documentBuilder=documentBuilderFactory.newDocumentBuilder();
+			Document document=documentBuilder.parse(urlString);
+			document.getDocumentElement().normalize();
+			Element channel=(Element)document.getElementsByTagName("channel").item(0);
+			String source=parseTag(channel,"title");
+			NodeList nodeList=document.getElementsByTagName("item");
+			for(int i=0;i<nodeList.getLength();i++)
 			{
-				try
+				Node node=nodeList.item(i);
+				if(node.getNodeType()==Node.ELEMENT_NODE)
 				{
-					DocumentBuilder documentBuilder=documentBuilderFactory.newDocumentBuilder();
-					Document document=documentBuilder.parse(urlString);
-					document.getDocumentElement().normalize();
-					Element channel=(Element)document.getElementsByTagName("channel").item(0);
-					String source=parseTag(channel,"title");
-					NodeList nodeList=document.getElementsByTagName("item");
-					for(int i=0;i<nodeList.getLength();i++)
-					{
-						Node node=nodeList.item(i);
-						if(node.getNodeType()==Node.ELEMENT_NODE)
-						{
-							RSSFeed rssFeed=new RSSFeed();
-							rssFeed.setSource(source);
-							Element element=(Element)node;
-							rssFeed.setTitle(parseTag(element,"title"));
-							rssFeed.setLink(parseTag(element,"link"));
-							String pubDate=parseTag(element,"pubDate");
-							if(pubDate!=null&&pubDate.trim()!="")
-								rssFeed.setPubDate(format.parse(pubDate));
-							else
-								rssFeed.setPubDate(now);
-							rssFeed.setTimeDifference(timeDifference(rssFeed.getPubDate()));
-							list.add(rssFeed);
-						}
-					}
-				}
-				catch(Exception e)
-				{
-					logger.log(Level.SEVERE,urlString,e);
+					RSSFeed rssFeed=new RSSFeed();
+					rssFeed.setSource(source);
+					Element element=(Element)node;
+					rssFeed.setTitle(parseTag(element,"title"));
+					rssFeed.setLink(parseTag(element,"link"));
+					String pubDate=parseTag(element,"pubDate");
+					if(pubDate!=null&&pubDate.trim()!="")
+						rssFeed.setPubDate(format.parse(pubDate));
+					else
+						rssFeed.setPubDate(now);
+					rssFeed.setTimeDifference(timeDifference(rssFeed.getPubDate()));
+					list.add(rssFeed);
 				}
 			}
-		);
+		}
+		catch(Exception e)
+		{
+			logger.log(Level.SEVERE,urlString,e);
+		}
+		return list;
 	}
 	private String parseTag(Element element,String tag)
 	{
