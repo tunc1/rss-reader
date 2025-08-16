@@ -32,9 +32,9 @@ public class RSSParser
 	private static final DocumentBuilderFactory documentBuilderFactory=DocumentBuilderFactory.newInstance();
 	private final ExecutorService executorService;
 	
-	public RSSParser(@Value("${batch-size}") int batchSize)
+	public RSSParser(@Value("${pool-size}") int poolSize)
 	{
-		executorService=Executors.newFixedThreadPool(batchSize);
+		executorService=Executors.newFixedThreadPool(poolSize);
 		System.setProperty("http.agent", "Mozilla/5.0");
 	}
 	public List<RSSFeed> get(Optional<String[]> urls)
