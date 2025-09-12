@@ -22,6 +22,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Callable;
 import java.util.concurrent.Future;
+import java.net.URL;
+import java.net.URLConnection;
 
 @Component
 public class RSSParser
@@ -31,11 +33,13 @@ public class RSSParser
 	private static final Comparator<RSSFeed> comparator=(r1,r2)->r2.getPubDate().compareTo(r1.getPubDate());
 	private static final DocumentBuilderFactory documentBuilderFactory=DocumentBuilderFactory.newInstance();
 	private final ExecutorService executorService;
+	private final int timeout;
 	
-	public RSSParser(@Value("${pool-size}") int poolSize)
+	public RSSParser(@Value("${pool-size}") int poolSize,@Value("${timeout}") int timeout)
 	{
 		executorService=Executors.newFixedThreadPool(poolSize);
 		System.setProperty("http.agent", "Mozilla/5.0");
+		this.timeout=timeout;
 	}
 	public List<RSSFeed> get(Optional<String[]> urls)
 	{
@@ -66,12 +70,15 @@ public class RSSParser
 	}
 	private List<RSSFeed> getListFromUrl(String urlString,Date now)
 	{
-		logger.log(Level.INFO,urlString);
 		List<RSSFeed> list=new LinkedList<>();
 		try
 		{
 			DocumentBuilder documentBuilder=documentBuilderFactory.newDocumentBuilder();
-			Document document=documentBuilder.parse(urlString);
+			URL url=new URL(urlString);
+            URLConnection connection=url.openConnection();
+			connection.setConnectTimeout(timeout);
+            connection.setReadTimeout(timeout);
+			Document document=documentBuilder.parse(connection.getInputStream());
 			document.getDocumentElement().normalize();
 			Element channel=(Element)document.getElementsByTagName("channel").item(0);
 			String source=parseTag(channel,"title");
