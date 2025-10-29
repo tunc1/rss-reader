@@ -4,7 +4,7 @@ import java.util.Date;
 
 public class RSSFeed
 {
-	private String title,link,source,timeDifference;
+	private String title,link,source,timeDifference,image;
 	private Date pubDate;
 	public String getTitle()
 	{
@@ -29,6 +29,14 @@ public class RSSFeed
 	public void setSource(String source)
 	{
 		this.source=source;
+	}
+	public String getImage()
+	{
+		return image;
+	}
+	public void setImage(String image)
+	{
+		this.image=image;
 	}
 	public String getTimeDifference()
 	{

@@ -99,6 +99,7 @@ public class RSSParser
 					else
 						rssFeed.setPubDate(now);
 					rssFeed.setTimeDifference(TimeUtil.timeDifference(rssFeed.getPubDate()));
+					rssFeed.setImage(getImage(element));
 					list.add(rssFeed);
 				}
 			}
@@ -114,6 +115,16 @@ public class RSSParser
 		NodeList nodeList=element.getElementsByTagName(tag);
 		if(nodeList.getLength()>0)
 			return nodeList.item(0).getTextContent();
+		return null;
+	}
+	private String getImage(Element element)
+	{
+		NodeList enclosureNodeList=element.getElementsByTagName("enclosure");
+		if(enclosureNodeList.getLength()>0)
+			return enclosureNodeList.item(0).getAttributes().getNamedItem("url").getNodeValue();
+		NodeList mediaThumbnailNodeList=element.getElementsByTagName("media:thumbnail");
+		if(mediaThumbnailNodeList.getLength()>0)
+			return mediaThumbnailNodeList.item(0).getAttributes().getNamedItem("url").getNodeValue();
 		return null;
 	}
 }
