@@ -5,6 +5,7 @@ import java.util.LinkedList;
 import java.util.Date;
 import java.util.Comparator;
 import java.util.Optional;
+import java.util.Locale;
 import java.text.SimpleDateFormat;
 import app.dto.RSSFeed;
 import app.util.TimeUtil;
@@ -33,30 +34,32 @@ public class RSSParser
 	private static final Comparator<RSSFeed> comparator=(r1,r2)->r2.getPubDate().compareTo(r1.getPubDate());
 	private static final DocumentBuilderFactory documentBuilderFactory=DocumentBuilderFactory.newInstance();
 	private final ExecutorService executorService;
+	private final TimeUtil timeUtil;
 	private final int timeout;
 	
-	public RSSParser(@Value("${pool-size}") int poolSize,@Value("${timeout}") int timeout)
+	public RSSParser(@Value("${pool-size}") int poolSize,@Value("${timeout}") int timeout,TimeUtil timeUtil)
 	{
 		executorService=Executors.newFixedThreadPool(poolSize);
 		System.setProperty("http.agent", "Mozilla/5.0");
 		this.timeout=timeout;
+		this.timeUtil=timeUtil;
 	}
-	public List<RSSFeed> get(Optional<String[]> urls)
+	public List<RSSFeed> get(Optional<String[]> urls,Locale locale)
 	{
 		List<RSSFeed> list=new LinkedList();
 		if(urls.isPresent())
 		{
-			fillList(list,urls.get());
+			fillList(list,urls.get(),locale);
 			list.sort(comparator);
 		}
 		return list;
 	}
-	private void fillList(List<RSSFeed> list,String[] urls)
+	private void fillList(List<RSSFeed> list,String[] urls,Locale locale)
 	{
 		Date now=new Date();
 		List<Callable<List<RSSFeed>>> callables=new LinkedList<>();
 		for(String url:urls)
-			callables.add(()->getListFromUrl(url,now));
+			callables.add(()->getListFromUrl(url,now,locale));
 		try
 		{
 			List<Future<List<RSSFeed>>> futures=executorService.invokeAll(callables);
@@ -68,7 +71,7 @@ public class RSSParser
 			logger.log(Level.SEVERE,"Error",e);
 		}
 	}
-	private List<RSSFeed> getListFromUrl(String urlString,Date now)
+	private List<RSSFeed> getListFromUrl(String urlString,Date now,Locale locale)
 	{
 		List<RSSFeed> list=new LinkedList<>();
 		try
@@ -98,7 +101,7 @@ public class RSSParser
 						rssFeed.setPubDate(format.parse(pubDate));
 					else
 						rssFeed.setPubDate(now);
-					rssFeed.setTimeDifference(TimeUtil.timeDifference(rssFeed.getPubDate()));
+					rssFeed.setTimeDifference(timeUtil.timeDifference(rssFeed.getPubDate(),locale));
 					rssFeed.setImage(getImage(element));
 					list.add(rssFeed);
 				}

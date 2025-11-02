@@ -5,6 +5,7 @@ import app.service.RSSParser;
 import app.dto.RSSFeed;
 import java.util.List;
 import java.util.Optional;
+import java.util.Locale;
 
 @RestController
 @RequestMapping("/api/rss")
@@ -17,8 +18,8 @@ public class RSSController
 		this.parser=parser;
 	}
 	@GetMapping
-	public List<RSSFeed> get(Optional<String[]> urls)
+	public List<RSSFeed> get(Optional<String[]> urls,@RequestParam(defaultValue="en") Locale locale)
 	{
-		return parser.get(urls);
+		return parser.get(urls,locale);
 	}
 }
