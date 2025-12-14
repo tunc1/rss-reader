@@ -9,6 +9,7 @@ import java.util.Locale;
 import java.text.SimpleDateFormat;
 import app.dto.RSSFeed;
 import app.util.TimeUtil;
+import app.controller.response.RSSResponse;
 import org.springframework.stereotype.Component;
 import org.springframework.beans.factory.annotation.Value;
 import java.util.logging.Logger;
@@ -44,7 +45,7 @@ public class RSSParser
 		this.timeout=timeout;
 		this.timeUtil=timeUtil;
 	}
-	public List<RSSFeed> get(Optional<String[]> urls,Locale locale)
+	public RSSResponse get(Optional<String[]> urls,Locale locale)
 	{
 		List<RSSFeed> list=new LinkedList();
 		if(urls.isPresent())
@@ -52,7 +53,7 @@ public class RSSParser
 			fillList(list,urls.get(),locale);
 			list.sort(comparator);
 		}
-		return list;
+		return new RSSResponse(list);
 	}
 	private void fillList(List<RSSFeed> list,String[] urls,Locale locale)
 	{
