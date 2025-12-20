@@ -7,18 +7,19 @@ import java.util.Comparator;
 import java.util.Optional;
 import java.util.Locale;
 import java.text.SimpleDateFormat;
-import app.dto.RSSFeed;
-import app.util.TimeUtil;
+import app.dto.*;
+import app.util.*;
 import app.controller.response.RSSResponse;
 import org.springframework.stereotype.Component;
 import org.springframework.beans.factory.annotation.Value;
 import java.util.logging.Logger;
 import java.util.logging.Level;
-import org.w3c.dom.Document;  
-import org.w3c.dom.NodeList;  
-import org.w3c.dom.Node;  
-import org.w3c.dom.Element;  
-import javax.xml.parsers.DocumentBuilderFactory;  
+import org.w3c.dom.Document;
+import org.w3c.dom.NodeList;
+import org.w3c.dom.Node;
+import org.w3c.dom.Element;
+import org.xml.sax.SAXParseException;
+import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.DocumentBuilder;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ExecutorService;
@@ -26,6 +27,8 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.Future;
 import java.net.URL;
 import java.net.URLConnection;
+import java.net.UnknownHostException;
+import java.net.SocketTimeoutException;
 
 @Component
 public class RSSParser
@@ -36,45 +39,54 @@ public class RSSParser
 	private static final DocumentBuilderFactory documentBuilderFactory=DocumentBuilderFactory.newInstance();
 	private final ExecutorService executorService;
 	private final TimeUtil timeUtil;
+	private final ErrorMessageUtil errorMessageUtil;
 	private final int timeout;
 	
-	public RSSParser(@Value("${pool-size}") int poolSize,@Value("${timeout}") int timeout,TimeUtil timeUtil)
+	public RSSParser(@Value("${pool-size}") int poolSize,@Value("${timeout}") int timeout,TimeUtil timeUtil,ErrorMessageUtil errorMessageUtil)
 	{
 		executorService=Executors.newFixedThreadPool(poolSize);
 		System.setProperty("http.agent", "Mozilla/5.0");
 		this.timeout=timeout;
 		this.timeUtil=timeUtil;
+		this.errorMessageUtil=errorMessageUtil;
 	}
 	public RSSResponse get(Optional<String[]> urls,Locale locale)
 	{
 		List<RSSFeed> list=new LinkedList();
+		List<ErrorMessage> errorMessages=new LinkedList();
 		if(urls.isPresent())
 		{
-			fillList(list,urls.get(),locale);
+			fillList(list,errorMessages,urls.get(),locale);
 			list.sort(comparator);
 		}
-		return new RSSResponse(list);
+		return new RSSResponse(list,errorMessages);
 	}
-	private void fillList(List<RSSFeed> list,String[] urls,Locale locale)
+	private void fillList(List<RSSFeed> list,List<ErrorMessage> errorMessages,String[] urls,Locale locale)
 	{
 		Date now=new Date();
-		List<Callable<List<RSSFeed>>> callables=new LinkedList<>();
+		List<Callable<RSSFeedList>> callables=new LinkedList<>();
 		for(String url:urls)
 			callables.add(()->getListFromUrl(url,now,locale));
 		try
 		{
-			List<Future<List<RSSFeed>>> futures=executorService.invokeAll(callables);
-			for(Future<List<RSSFeed>> future:futures)
-				list.addAll(future.get());
+			List<Future<RSSFeedList>> futures=executorService.invokeAll(callables);
+			for(Future<RSSFeedList> future:futures)
+			{
+				RSSFeedList rSSFeedList=future.get();
+				list.addAll(rSSFeedList.rssFeeds());
+				if(rSSFeedList.errorMessage().isPresent())
+					errorMessages.add(rSSFeedList.errorMessage().get());
+			}
 		}
 		catch(Exception e)
 		{
 			logger.log(Level.SEVERE,"Error",e);
 		}
 	}
-	private List<RSSFeed> getListFromUrl(String urlString,Date now,Locale locale)
+	private RSSFeedList getListFromUrl(String urlString,Date now,Locale locale)
 	{
 		List<RSSFeed> list=new LinkedList<>();
+		ErrorMessage errorMessage=null;
 		try
 		{
 			DocumentBuilder documentBuilder=documentBuilderFactory.newDocumentBuilder();
@@ -108,11 +120,24 @@ public class RSSParser
 				}
 			}
 		}
+		catch (UnknownHostException e)
+		{
+			errorMessage=new ErrorMessage(urlString,errorMessageUtil.invalidUrl(locale));
+		}
+		catch (SocketTimeoutException e)
+		{
+			errorMessage=new ErrorMessage(urlString,errorMessageUtil.couldNotConnect(locale));
+		}
+		catch(SAXParseException e)
+		{
+			errorMessage=new ErrorMessage(urlString,errorMessageUtil.invalidRSS(locale));
+		}
 		catch(Exception e)
 		{
 			logger.log(Level.SEVERE,urlString,e);
+			errorMessage=new ErrorMessage(urlString,errorMessageUtil.generic(locale));
 		}
-		return list;
+		return new RSSFeedList(list,Optional.ofNullable(errorMessage));
 	}
 	private String parseTag(Element element,String tag)
 	{
